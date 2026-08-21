@@ -1,4 +1,4 @@
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes,parser_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
@@ -10,13 +10,16 @@ from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
 from django.db.models import Q
+from rest_framework.parsers import MultiPartParser, FormParser
+from .gemini_vision import analyze_civic_image
 
 from .models import CustomUser, OTPRecord, CivicIssue, Comment, NotificationItem
 from .serializers import (
     OTPRequestSerializer, OTPVerifySerializer, CustomUserSerializer,
     CivicIssueSerializer, CommentSerializer, NotificationSerializer
 )
-
+import logging
+logger = logging.getLogger(__name__)
 # Helper to set refresh cookie on responses
 def _set_refresh_cookie(resp: Response, refresh_token: str):
     # Secure should be True in production (requires HTTPS). Use settings.DEBUG to toggle locally.
@@ -462,3 +465,47 @@ def mark_notification_read(request, pk):
 def mark_all_notifications_read(request):
     request.user.notifications.filter(read=False).update(read=True)
     return Response({"status": "success"}, status=status.HTTP_200_OK)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
+def analyze_issue_image(request):
+    image_file = request.FILES.get('image')
+
+    if not image_file:
+        return Response(
+            {"error": "Image is required."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    allowed_types = {
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+    }
+
+    if image_file.content_type not in allowed_types:
+        return Response(
+            {"error": "Only JPEG, PNG, and WebP images are supported."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        analysis = analyze_civic_image(image_file)
+
+        return Response(
+            {
+                "analysis": analysis
+            },
+            status=status.HTTP_200_OK
+        )
+
+    except Exception as e:
+        logger.exception("Image analysis failed")
+
+        return Response(
+            {
+                "error": "Image analysis failed.",
+                "detail": str(e)
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

@@ -3,7 +3,7 @@ from .views import (
     hello_api, email_request_otp, email_verify_otp, register_user, user_profile,
     issue_list_create, issue_detail, upvote_issue, verify_issue, update_issue_status,
     comment_list_create, notification_list, mark_notification_read, mark_all_notifications_read,
-    CookieTokenObtainPairView, cookie_refresh, logout_view
+    CookieTokenObtainPairView, cookie_refresh, logout_view,analyze_issue_image
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -19,6 +19,9 @@ urlpatterns = [
     path("auth/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("auth/token/refresh/cookie/", cookie_refresh, name="token_refresh_cookie"),
     path("auth/logout/", logout_view, name="auth_logout"),
+    #Posting route
+    path('issues/analyze-image/', analyze_issue_image, name='analyze_issue_image'),
+        
     
     # Issues routes
     path("issues/", issue_list_create, name="issue_list_create"),
@@ -32,4 +35,4 @@ urlpatterns = [
     path("notifications/", notification_list, name="notification_list"),
     path("notifications/<int:pk>/read/", mark_notification_read, name="mark_notification_read"),
     path("notifications/read-all/", mark_all_notifications_read, name="mark_all_notifications_read"),
-]
+    ]
