@@ -5,15 +5,19 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
+import logging
 import random
 import os
+import math
+import difflib
 from datetime import timedelta
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
+from django.db import models
 from django.db.models import Q
-import math
-import difflib
+
+logger = logging.getLogger(__name__)
 
 from .models import CustomUser, OTPRecord, CivicIssue, Comment, NotificationItem, State, City, Ward, Profile, Announcement, BudgetAllocation, ConsensusPoll, WardBudgetProposal
 from .serializers import (
@@ -825,17 +829,22 @@ def issue_list_create(request):
             return Response(CivicIssueSerializer(issue, context={'request': request}).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+def get_civic_issue_by_pk(pk):
+    """Robust lookup supporting raw ID, JS- prefixed ID, and numeric ID."""
+    if not pk:
+        return None
+    pk_str = str(pk).strip()
+    issue = CivicIssue.objects.filter(pk=pk_str).first()
+    if issue:
+        return issue
+    clean_pk = pk_str.replace("JS-", "").replace("js-", "").strip()
+    return CivicIssue.objects.filter(Q(id=f"JS-{clean_pk}") | Q(id=clean_pk)).first()
+
 @api_view(['GET', 'DELETE'])
 @permission_classes([AllowAny])
 def issue_detail(request, pk):
-    try:
-        issue = (
-            CivicIssue.objects
-            .select_related('reporter', 'assigned_officer')
-            .prefetch_related('comments', 'upvoted_users')
-            .get(pk=pk)
-        )
-    except CivicIssue.DoesNotExist:
+    issue = get_civic_issue_by_pk(pk)
+    if not issue:
         return Response({"error": "Issue not found"}, status=status.HTTP_404_NOT_FOUND)
         
     if request.method == 'GET':
@@ -854,9 +863,8 @@ def issue_detail(request, pk):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def upvote_issue(request, pk):
-    try:
-        issue = CivicIssue.objects.get(pk=pk)
-    except CivicIssue.DoesNotExist:
+    issue = get_civic_issue_by_pk(pk)
+    if not issue:
         return Response({"error": "Issue not found"}, status=status.HTTP_404_NOT_FOUND)
         
     if issue.upvoted_users.filter(id=request.user.id).exists():
@@ -880,9 +888,8 @@ def upvote_issue(request, pk):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def verify_issue(request, pk):
-    try:
-        issue = CivicIssue.objects.get(pk=pk)
-    except CivicIssue.DoesNotExist:
+    issue = get_civic_issue_by_pk(pk)
+    if not issue:
         return Response({"error": "Issue not found"}, status=status.HTTP_404_NOT_FOUND)
         
     vote = request.data.get('vote')
@@ -945,10 +952,7 @@ def verify_issue(request, pk):
 @permission_classes([AllowAny])
 def update_issue_status(request, pk):
     try:
-        issue = CivicIssue.objects.filter(pk=pk).first()
-        if not issue:
-            clean_pk = pk.replace("JS-", "")
-            issue = CivicIssue.objects.filter(models.Q(id=f"JS-{clean_pk}") | models.Q(id=clean_pk)).first()
+        issue = get_civic_issue_by_pk(pk)
         if not issue:
             return Response({"error": "Issue not found"}, status=status.HTTP_404_NOT_FOUND)
             
@@ -986,7 +990,7 @@ def update_issue_status(request, pk):
                 if str(assigned_officer_id).isdigit():
                     officer_user = CustomUser.objects.filter(id=int(assigned_officer_id)).first()
                 if not officer_user:
-                    officer_user = CustomUser.objects.filter(models.Q(username=str(assigned_officer_id)) | models.Q(email=str(assigned_officer_id))).first()
+                    officer_user = CustomUser.objects.filter(Q(username=str(assigned_officer_id)) | Q(email=str(assigned_officer_id))).first()
             
             if not officer_user and (new_status in ['Assigned', 'Squad Dispatched', 'In Progress', 'Field Work Active'] or "responsibility" in (note or "").lower()):
                 dept_cat = issue.category or "Water"
@@ -1060,10 +1064,7 @@ def update_issue_status(request, pk):
 @permission_classes([AllowAny])
 def assign_officer_squad(request, pk):
     try:
-        issue = CivicIssue.objects.filter(pk=pk).first()
-        if not issue:
-            clean_pk = pk.replace("JS-", "")
-            issue = CivicIssue.objects.filter(models.Q(id=f"JS-{clean_pk}") | models.Q(id=clean_pk)).first()
+        issue = get_civic_issue_by_pk(pk)
         if not issue:
             return Response({"error": "Issue not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -1079,7 +1080,7 @@ def assign_officer_squad(request, pk):
                 if str(assigned_officer_id).isdigit():
                     officer_user = CustomUser.objects.filter(id=int(assigned_officer_id)).first()
                 if not officer_user:
-                    officer_user = CustomUser.objects.filter(models.Q(username=str(assigned_officer_id)) | models.Q(email=str(assigned_officer_id))).first()
+                    officer_user = CustomUser.objects.filter(Q(username=str(assigned_officer_id)) | Q(email=str(assigned_officer_id))).first()
             
             if not officer_user:
                 dept_cat = issue.category or "Water"
@@ -1133,9 +1134,8 @@ def assign_officer_squad(request, pk):
 @api_view(['GET', 'POST'])
 @permission_classes([AllowAny])
 def comment_list_create(request, pk):
-    try:
-        issue = CivicIssue.objects.get(pk=pk)
-    except CivicIssue.DoesNotExist:
+    issue = get_civic_issue_by_pk(pk)
+    if not issue:
         return Response({"error": "Issue not found"}, status=status.HTTP_404_NOT_FOUND)
         
     if request.method == 'GET':
