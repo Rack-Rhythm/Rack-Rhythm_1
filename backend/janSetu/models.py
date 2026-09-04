@@ -76,8 +76,8 @@ class CivicIssue(models.Model):
     id = models.CharField(max_length=50, primary_key=True) # Custom ID format, e.g., JS-101
     title = models.CharField(max_length=255)
     description = models.TextField()
-    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
-    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='Reported')
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
+    status = models.CharField(max_length=100, choices=STATUS_CHOICES, default='Reported')
     urgency = models.CharField(max_length=20, choices=URGENCY_CHOICES)
     
     # Nested field JSON mappings
@@ -129,7 +129,7 @@ class NotificationItem(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='notifications')
     title = models.CharField(max_length=255)
     message = models.TextField()
-    notification_type = models.CharField(max_length=20) # status, upvote, ward, etc.
+    notification_type = models.CharField(max_length=50) # status, upvote, ward, etc.
     timestamp = models.DateTimeField(auto_now_add=True)
     read = models.BooleanField(default=False)
     issue_id = models.CharField(max_length=50, blank=True, null=True)
