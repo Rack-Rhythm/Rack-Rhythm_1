@@ -829,6 +829,18 @@ def issue_list_create(request):
             return Response(CivicIssueSerializer(issue, context={'request': request}).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+def ensure_db_schema_compatibility():
+    """Dynamically ensures PostgreSQL table columns have adequate width for long statuses like 'Pending Citizen Verification'."""
+    try:
+        from django.db import connection
+        if connection.vendor == 'postgresql':
+            with connection.cursor() as cursor:
+                cursor.execute('ALTER TABLE "janSetu_civicissue" ALTER COLUMN "status" TYPE varchar(100);')
+                cursor.execute('ALTER TABLE "janSetu_civicissue" ALTER COLUMN "category" TYPE varchar(50);')
+                cursor.execute('ALTER TABLE "janSetu_notificationitem" ALTER COLUMN "notification_type" TYPE varchar(50);')
+    except Exception as e:
+        logger.debug(f"Schema compatibility notice: {e}")
+
 def get_civic_issue_by_pk(pk):
     """Robust lookup supporting raw ID, JS- prefixed ID, and numeric ID."""
     if not pk:
@@ -935,7 +947,14 @@ def verify_issue(request, pk):
         })
         issue.timeline = timeline
     
-    issue.save()
+    try:
+        issue.save()
+    except Exception as save_err:
+        if "character varying" in str(save_err) or "value too long" in str(save_err) or "DataError" in type(save_err).__name__:
+            ensure_db_schema_compatibility()
+            issue.save()
+        else:
+            raise save_err
     
     request.user.civic_citizen_xp = (request.user.civic_citizen_xp or 0) + 15
     stats = request.user.stats or {}
@@ -1040,7 +1059,14 @@ def update_issue_status(request, pk):
                 request.user.stats = stats
                 request.user.save()
                 
-        issue.save()
+        try:
+            issue.save()
+        except Exception as save_err:
+            if "character varying" in str(save_err) or "value too long" in str(save_err) or "DataError" in type(save_err).__name__:
+                ensure_db_schema_compatibility()
+                issue.save()
+            else:
+                raise save_err
         
         if issue.reporter:
             try:
