@@ -56,6 +56,7 @@ class CivicIssue(models.Model):
         ('Waste', 'Waste'),
         ('Traffic', 'Traffic'),
         ('Parks', 'Parks'),
+        ('Innovation', 'Innovation'),
     ]
     STATUS_CHOICES = [
         ('Reported', 'Reported'),
@@ -65,6 +66,10 @@ class CivicIssue(models.Model):
         ('Resolved', 'Resolved'),
         ('Pending Citizen Verification', 'Pending Citizen Verification'),
         ('Verified Resolved', 'Verified Resolved'),
+        ('Under Review', 'Under Review'),
+        ('Feasibility Approved', 'Feasibility Approved'),
+        ('Pilot Scheduled', 'Pilot Scheduled'),
+        ('Budget Allocated', 'Budget Allocated'),
     ]
     URGENCY_CHOICES = [
         ('Critical', 'Critical'),

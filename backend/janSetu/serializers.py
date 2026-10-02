@@ -148,6 +148,12 @@ class CivicIssueSerializer(serializers.ModelSerializer):
     timesReported = serializers.IntegerField(source='times_reported', required=False, default=1)
     mergedTicketIds = serializers.JSONField(source='merged_ticket_ids', required=False, default=list)
     pincode = serializers.CharField(source='pin_code', read_only=True)
+    isInnovation = serializers.SerializerMethodField()
+    innovationTheme = serializers.SerializerMethodField()
+    communityBenefit = serializers.SerializerMethodField()
+    estimatedBudget = serializers.SerializerMethodField()
+    officerVerdict = serializers.SerializerMethodField()
+    officerFeedback = serializers.SerializerMethodField()
 
     class Meta:
         model = CivicIssue
@@ -156,8 +162,33 @@ class CivicIssueSerializer(serializers.ModelSerializer):
             'location', 'pin_code', 'pincode', 'reporter', 'images', 'aiAnalysis', 'assignedDepartment',
             'assignedOfficer', 'timeline', 'upvotes', 'isUpvoted', 'commentsCount',
             'verificationVotes', 'is_hidden_from_map', 'times_reported', 'timesReported',
-            'merged_ticket_ids', 'mergedTicketIds', 'createdAt', 'updatedAt'
+            'merged_ticket_ids', 'mergedTicketIds', 'createdAt', 'updatedAt',
+            'isInnovation', 'innovationTheme', 'communityBenefit', 'estimatedBudget', 'officerVerdict', 'officerFeedback'
         ]
+
+    def get_isInnovation(self, obj):
+        ai = obj.ai_analysis or {}
+        return obj.category == 'Innovation' or bool(ai.get('is_innovation')) or bool(ai.get('isInnovation'))
+
+    def get_innovationTheme(self, obj):
+        ai = obj.ai_analysis or {}
+        return ai.get('innovation_theme') or ai.get('innovationTheme') or (obj.category if obj.category == 'Innovation' else None)
+
+    def get_communityBenefit(self, obj):
+        ai = obj.ai_analysis or {}
+        return ai.get('community_benefit') or ai.get('communityBenefit') or ''
+
+    def get_estimatedBudget(self, obj):
+        ai = obj.ai_analysis or {}
+        return ai.get('estimated_budget') or ai.get('estimatedBudget') or ''
+
+    def get_officerVerdict(self, obj):
+        ai = obj.ai_analysis or {}
+        return ai.get('officer_verdict') or ai.get('officerVerdict') or (obj.status if obj.status in ['Under Review', 'Feasibility Approved', 'Pilot Scheduled', 'Budget Allocated'] else None)
+
+    def get_officerFeedback(self, obj):
+        ai = obj.ai_analysis or {}
+        return ai.get('officer_feedback') or ai.get('officerFeedback') or ''
 
     def get_isUpvoted(self, obj):
         request = self.context.get('request')
@@ -201,6 +232,12 @@ class CivicIssueFeedSerializer(serializers.ModelSerializer):
     pincode = serializers.CharField(source='pin_code', read_only=True)
     images = serializers.SerializerMethodField()
     aiAnalysis = serializers.SerializerMethodField()
+    isInnovation = serializers.SerializerMethodField()
+    innovationTheme = serializers.SerializerMethodField()
+    communityBenefit = serializers.SerializerMethodField()
+    estimatedBudget = serializers.SerializerMethodField()
+    officerVerdict = serializers.SerializerMethodField()
+    officerFeedback = serializers.SerializerMethodField()
 
     class Meta:
         model = CivicIssue
@@ -209,8 +246,33 @@ class CivicIssueFeedSerializer(serializers.ModelSerializer):
             'location', 'pin_code', 'pincode', 'reporter', 'images', 'aiAnalysis',
             'assignedDepartment', 'assignedOfficer', 'timeline', 'upvotes', 'isUpvoted',
             'commentsCount', 'verificationVotes', 'times_reported', 'timesReported',
-            'merged_ticket_ids', 'mergedTicketIds', 'createdAt', 'updatedAt'
+            'merged_ticket_ids', 'mergedTicketIds', 'createdAt', 'updatedAt',
+            'isInnovation', 'innovationTheme', 'communityBenefit', 'estimatedBudget', 'officerVerdict', 'officerFeedback'
         ]
+
+    def get_isInnovation(self, obj):
+        ai = obj.ai_analysis or {}
+        return obj.category == 'Innovation' or bool(ai.get('is_innovation')) or bool(ai.get('isInnovation'))
+
+    def get_innovationTheme(self, obj):
+        ai = obj.ai_analysis or {}
+        return ai.get('innovation_theme') or ai.get('innovationTheme') or (obj.category if obj.category == 'Innovation' else None)
+
+    def get_communityBenefit(self, obj):
+        ai = obj.ai_analysis or {}
+        return ai.get('community_benefit') or ai.get('communityBenefit') or ''
+
+    def get_estimatedBudget(self, obj):
+        ai = obj.ai_analysis or {}
+        return ai.get('estimated_budget') or ai.get('estimatedBudget') or ''
+
+    def get_officerVerdict(self, obj):
+        ai = obj.ai_analysis or {}
+        return ai.get('officer_verdict') or ai.get('officerVerdict') or (obj.status if obj.status in ['Under Review', 'Feasibility Approved', 'Pilot Scheduled', 'Budget Allocated'] else None)
+
+    def get_officerFeedback(self, obj):
+        ai = obj.ai_analysis or {}
+        return ai.get('officer_feedback') or ai.get('officerFeedback') or ''
 
     def get_isUpvoted(self, obj):
         request = self.context.get('request')
@@ -252,7 +314,8 @@ class CivicIssueFeedSerializer(serializers.ModelSerializer):
     def get_aiAnalysis(self, obj):
         ai = obj.ai_analysis or {}
         return {
-            "detectedObject": ai.get("detectedObject", "Civic Defect"),
+            **ai,
+            "detectedObject": ai.get("detectedObject") or ai.get("innovation_theme") or "Civic Defect",
             "confidence": ai.get("confidence", 90),
             "summary": ai.get("summary", "Civic issue reported.")
         }
