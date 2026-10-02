@@ -689,7 +689,10 @@ def issue_list_create(request):
             elif 'sani' in dept_lower or 'waste' in dept_lower:
                 issues = issues.filter(Q(category__icontains='sanitat') | Q(category__icontains='waste') | Q(category__icontains='garbage') | Q(category__icontains='clean'))
 
-        if category and category != 'all':
+        is_innovation = request.query_params.get('is_innovation')
+        if is_innovation == 'true' or category == 'Innovation':
+            issues = issues.filter(Q(category='Innovation') | Q(ai_analysis__is_innovation=True))
+        elif category and category != 'all':
             issues = issues.filter(category=category)
         if status_param and status_param != 'all':
             issues = issues.filter(status=status_param)
@@ -776,6 +779,30 @@ def issue_list_create(request):
         # Ensure pin_code is populated from location if missing
         if not data.get('pin_code') and isinstance(data.get('location'), dict):
             data['pin_code'] = data['location'].get('pincode', '')
+
+        # Defensively normalize category to strictly match CivicIssue.CATEGORY_CHOICES
+        cat_raw = str(data.get('category', 'Roads') or 'Roads').strip()
+        cat_lower = cat_raw.lower()
+        if 'waste' in cat_lower or 'garbage' in cat_lower or 'trash' in cat_lower or 'dump' in cat_lower:
+            data['category'] = 'Waste'
+        elif 'sanitat' in cat_lower or 'drain' in cat_lower or 'sewag' in cat_lower or 'clean' in cat_lower or 'manhole' in cat_lower:
+            data['category'] = 'Sanitation'
+        elif 'water' in cat_lower or 'pipe' in cat_lower or 'leak' in cat_lower:
+            data['category'] = 'Water'
+        elif 'electr' in cat_lower or 'light' in cat_lower or 'power' in cat_lower or 'wire' in cat_lower or 'pole' in cat_lower:
+            data['category'] = 'Electricity'
+        elif 'traffic' in cat_lower or 'signal' in cat_lower or 'obstacl' in cat_lower or 'encroach' in cat_lower:
+            data['category'] = 'Traffic'
+        elif 'park' in cat_lower or 'tree' in cat_lower or 'garden' in cat_lower or 'horticult' in cat_lower:
+            data['category'] = 'Parks'
+        elif 'road' in cat_lower or 'pothole' in cat_lower or 'culvert' in cat_lower or 'bridge' in cat_lower or 'asphalt' in cat_lower or 'footpath' in cat_lower:
+            data['category'] = 'Roads'
+        elif 'innovat' in cat_lower or 'idea' in cat_lower or 'proposal' in cat_lower or 'shelter' in cat_lower or 'cooling' in cat_lower:
+            data['category'] = 'Innovation'
+        elif cat_raw not in dict(CivicIssue.CATEGORY_CHOICES):
+            data['category'] = 'Roads'
+        else:
+            data['category'] = cat_raw
 
         # Generate unique custom id like JS-101
         counter = CivicIssue.objects.count() + 101
@@ -979,11 +1006,33 @@ def update_issue_status(request, pk):
         note = request.data.get('note', '')
         resolved_image = request.data.get('resolved_image') or request.data.get('photo')
         
-        if new_status not in ['Reported', 'AI Verified', 'Assigned', 'Squad Dispatched', 'Field Work Active', 'In Progress', 'Resolved', 'Pending Citizen Verification', 'Verified Resolved']:
+        valid_statuses = [
+            'Reported', 'AI Verified', 'Assigned', 'Squad Dispatched', 'Field Work Active',
+            'In Progress', 'Resolved', 'Pending Citizen Verification', 'Verified Resolved',
+            'Under Review', 'Feasibility Approved', 'Pilot Scheduled', 'Budget Allocated', 'Rejected'
+        ]
+        if new_status not in valid_statuses:
             return Response({"error": "Invalid status value."}, status=status.HTTP_400_BAD_REQUEST)
             
         actor_name = (request.user.get_full_name() or request.user.username) if request.user.is_authenticated else (request.data.get('officer_name') or "Municipal Authority")
         
+        # Save any dynamic innovation feasibility attributes passed
+        officer_verdict = request.data.get('officer_verdict') or request.data.get('verdict')
+        officer_feedback = request.data.get('officer_feedback') or (note if new_status in ['Under Review', 'Feasibility Approved', 'Pilot Scheduled', 'Budget Allocated'] else None)
+        estimated_budget = request.data.get('estimated_budget') or request.data.get('budget')
+        if officer_verdict or officer_feedback or estimated_budget:
+            ai_data = issue.ai_analysis or {}
+            if officer_verdict:
+                ai_data['officer_verdict'] = officer_verdict
+                ai_data['officerVerdict'] = officer_verdict
+            if officer_feedback:
+                ai_data['officer_feedback'] = officer_feedback
+                ai_data['officerFeedback'] = officer_feedback
+            if estimated_budget:
+                ai_data['estimated_budget'] = estimated_budget
+                ai_data['estimatedBudget'] = estimated_budget
+            issue.ai_analysis = ai_data
+
         if resolved_image:
             images = issue.images or {}
             images['resolved'] = process_media_string(resolved_image, folder="issues", prefix=f"{issue.id}_resolved", max_dim=800, quality=65)
